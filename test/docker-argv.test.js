@@ -47,10 +47,18 @@ test('deployment labels its data volume so it can be uninstalled completely', as
   const result = await response.json();
   assert.match(result.connectionString, /^mysql:\/\//);
 
-  const run = fs.readFileSync(calls, 'utf8').split('\n').find(line => line.startsWith('run '));
+  const lines = fs.readFileSync(calls, 'utf8').split('\n');
+  const volume = lines.find(line => line.startsWith('volume create '));
+  const run = lines.find(line => line.startsWith('run '));
+  assert.ok(volume, 'docker volume create was invoked');
   assert.ok(run, 'docker run was invoked');
+  // Volume labels come from `docker volume create` so old Docker versions (no volume-label mount option) also work.
+  assert.match(volume, /--label database-panel\.managed=true/);
+  assert.match(volume, /--label database-panel\.type=mysql/);
+  assert.match(volume, /mysql-test-data$/);
   assert.match(run, /--label database-panel\.managed=true/);
-  assert.match(run, /--mount type=volume,source=mysql-test-data,target=\/var\/lib\/mysql,volume-label=database-panel\.managed=true,volume-label=database-panel\.type=mysql/);
+  assert.match(run, /--volume mysql-test-data:\/var\/lib\/mysql/);
+  assert.doesNotMatch(run, /--mount/);
 });
 
 test('removing a database only deletes the container and keeps its volume', async () => {

@@ -5,6 +5,9 @@ services:
     container_name: dockbase-panel
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Inside the panel container the server always listens on 3000.
+      PORT: 3000
     ports:
       - "${PANEL_PORT:-3000}:3000"
     volumes:

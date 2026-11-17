@@ -113,12 +113,21 @@ async function route(req, res) {
       if (!Number.isInteger(port) || port < 1 || port > 65535) return json(res, 400, { error: 'Port must be between 1 and 65535.' });
       const password = crypto.randomBytes(18).toString('base64url');
       const rootPassword = crypto.randomBytes(24).toString('base64url');
-      const args = ['run', '-d', '--name', name, '--restart', 'unless-stopped', '--label', 'database-panel.managed=true', '--label', `database-panel.type=${input.type}`, '--publish', `${port}:${db.port}`, '--mount', `type=volume,source=${name}-data,target=${db.dataPath},volume-label=database-panel.managed=true,volume-label=database-panel.type=${input.type}`];
+      // Create the volume separately so it is labeled for complete uninstall on every Docker version (label support since 1.13).
+      await docker(['volume', 'create', '--label', 'database-panel.managed=true', '--label', `database-panel.type=${input.type}`, `${name}-data`]);
+      const args = ['run', '-d', '--name', name, '--restart', 'unless-stopped', '--label', 'database-panel.managed=true', '--label', `database-panel.type=${input.type}`, '--publish', `${port}:${db.port}`, '--volume', `${name}-data:${db.dataPath}`];
       for (const env of db.env(database, username, password, rootPassword)) args.push('--env', env);
       args.push('--env', `TZ=${process.env.TZ || 'UTC'}`);
       args.push(db.image);
       if (db.args) args.push(...db.args(password));
-      const id = await docker(args);
+      let id;
+      try {
+        id = await docker(args);
+      } catch (error) {
+        // Do not leave an unused, empty labeled volume behind when the container cannot start.
+        await docker(['volume', 'rm', `${name}-data`]).catch(() => {});
+        throw error;
+      }
       const connectionString = db.url(username, password, host, port, database);
       return json(res, 201, { id: id.slice(0, 12), name, type: input.type, database, username, password, host, port, image: db.image, connectionString, status: 'starting' });
     }

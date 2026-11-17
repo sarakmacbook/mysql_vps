@@ -20,7 +20,7 @@ Each database gets a named Docker volume and `unless-stopped` restart policy. Th
 
 ## One-command VPS install
 
-On a fresh **Ubuntu or Debian** VPS, run this as a single command to install Docker Engine if needed, download Dockbase, build the panel container, and start it:
+On a fresh VPS running **Ubuntu 16.04 or newer** or **Debian 9 or newer**, run this as a single command to install Docker Engine if needed, download Dockbase, build the panel container, and start it:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo bash
@@ -34,7 +34,20 @@ The installer prints the panel URL and a randomly generated access key when it f
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo PANEL_PORT=8080 bash
 ```
 
-The install directory is `/opt/dockbase`. Update it with `cd /opt/dockbase && sudo docker compose up -d --build`; stop it with `sudo docker compose down`. The container mounts `/var/run/docker.sock` so it can provision database containers on the host.
+Then open `http://YOUR_SERVER_IP:8080`.
+
+The install directory is `/opt/dockbase`. Re-running the installer updates and restarts the panel: `sudo /opt/dockbase/install.sh`. With Docker Compose it uses `docker compose up -d --build`; on hosts without Compose v2 (common on Ubuntu 16.04) it falls back to `docker build` + `docker run`, so nothing extra is required. The container mounts `/var/run/docker.sock` so it can provision database containers on the host.
+
+### Older releases (Ubuntu 16.04, 20.04; Debian 9/10)
+
+The installer adapts to end-of-life and older releases:
+
+- **Docker:** it first tries the official `get.docker.com` script. If that refuses the release, it adds Docker's APT repository for the release codename and installs `docker-ce`; if Docker publishes no packages for that codename any more, it falls back to the distribution's `docker.io` package. Existing Docker older than 17.03 is upgraded when possible.
+- **APT:** if `apt-get update` fails (expired release files), Ubuntu sources are switched to `old-releases.ubuntu.com`, with a `*.dockbase-backup` copy of each file kept next to it.
+- **No Compose needed:** the panel is a single container. Compose v2 is used when present and skipped otherwise.
+- **Old Docker:** volumes are labeled with `docker volume create --label` (available since Docker 1.13) instead of the `--mount ...,volume-label=` option (Docker 18.09+), so the complete uninstall works on old engines too. Engine 1.13 (the default `docker.io` on 16.04) still cannot run the panel; the installer then asks you to install a newer Docker.
+
+Ubuntu 16.04 and 20.04 standard support has ended, so treat these paths as best-effort, not a guarantee of upstream package availability. The main limit is Docker itself: Ubuntu 16.04's newest available engine is 19.03, and Docker Hub now publishes many official images only as OCI indexes, which very old engines may refuse to pull. If image pulls or the panel build fail on 16.04, the practical fix is to upgrade the operating system.
 
 ## Complete uninstall
 
@@ -44,7 +57,7 @@ The install directory is `/opt/dockbase`. Update it with `cd /opt/dockbase && su
 sudo /opt/dockbase/uninstall.sh
 ```
 
-It asks for confirmation, then removes the panel container and image, all database containers created by the panel, their data volumes, cached database images, and the `/opt/dockbase` directory (including the access key). Run it straight from GitHub if the directory is already gone:
+It asks for confirmation, then removes the panel container and image (found by name or its `dockbase.managed` label, so both the Compose and `docker run` install paths are covered), all database containers created by the panel, their data volumes, cached database images, and the `/opt/dockbase` directory (including the access key). Run it straight from GitHub if the directory is already gone:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/uninstall.sh | sudo bash

@@ -143,7 +143,16 @@ if (( docker_ready )); then
   while IFS= read -r volume; do
     [[ -n "$volume" ]] && add_volume "$volume"
   done < <(docker volume ls -q --filter label=database-panel.managed=true 2>/dev/null || true)
-  if docker inspect "$PANEL_CONTAINER" >/dev/null 2>&1; then panel_present=1; fi
+  if docker inspect "$PANEL_CONTAINER" >/dev/null 2>&1; then
+    panel_present=1
+  else
+    # Installs without Docker Compose start the panel with `docker run --label dockbase.managed=true`.
+    panel_labeled="$(docker ps -aq --filter label=dockbase.managed=true 2>/dev/null | head -n1 || true)"
+    if [[ -n "$panel_labeled" ]]; then
+      panel_present=1
+      PANEL_CONTAINER="$panel_labeled"
+    fi
+  fi
 fi
 
 panel_image_present=0
