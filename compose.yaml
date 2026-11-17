@@ -1,0 +1,14 @@
+services:
+  panel:
+    build: .
+    image: dockbase-panel:latest
+    container_name: dockbase-panel
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PANEL_PORT:-3000}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    init: true
+    security_opt:
+      - no-new-privileges:true

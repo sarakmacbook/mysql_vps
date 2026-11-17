@@ -18,21 +18,27 @@ mysql://user:password@db-host:3306/p2p
 
 Each database gets a named Docker volume and `unless-stopped` restart policy. Removing a container from the panel deliberately keeps its volume and data.
 
-## Start the panel
+## One-command VPS install
 
-Requirements: Node.js 20+ and a working Docker Engine, with permission for the Node process to use Docker.
-
-```sh
-npm start
-```
-
-Open `http://YOUR_SERVER:3000`. On first startup the server prints a **panel access key** to its terminal. Save it and enter it in the sign-in screen. To use a stable key across restarts, set it before launching:
+On a fresh **Ubuntu or Debian** VPS, run this as a single command to install Docker Engine if needed, download Dockbase, build the panel container, and start it:
 
 ```sh
-PANEL_TOKEN='use-a-long-random-secret-here' PORT=3000 npm start
+curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo bash
 ```
 
-The panel binds to `0.0.0.0`. Treat access to it as privileged: it controls Docker and can create or remove containers. Put it behind HTTPS and a trusted network/reverse proxy, and keep the panel key private.
+If you already have this repository checked out on the VPS, run `sudo ./install.sh` from its directory instead.
+
+The installer prints the panel URL and a randomly generated access key when it finishes. Save the key, open the URL, and sign in. To choose another port, pass `PANEL_PORT` through sudo:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo PANEL_PORT=8080 bash
+```
+
+The install directory is `/opt/dockbase`. Update it with `cd /opt/dockbase && sudo docker compose up -d --build`; stop it with `sudo docker compose down`. The container mounts `/var/run/docker.sock` so it can provision database containers on the host.
+
+For local development, install Node.js 20+ and Docker Engine, then run `npm start`. Open `http://YOUR_SERVER:3000`. On first startup the server prints a **panel access key** to its terminal. To set one manually, use `PANEL_TOKEN='use-a-long-random-secret-here' PORT=3000 npm start`.
+
+The panel is privileged: it controls Docker and can create or remove containers. Put it behind HTTPS and a trusted network/reverse proxy, and keep the panel key private.
 
 ## Network and data notes
 
