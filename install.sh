@@ -21,7 +21,9 @@ if ! command -v curl >/dev/null || ! command -v tar >/dev/null; then
   apt-get install -y curl ca-certificates tar
 fi
 
+docker_was_present=1
 if ! command -v docker >/dev/null; then
+  docker_was_present=0
   printf '\nInstalling Docker Engine...\n'
   curl -fsSL https://get.docker.com | sh
 fi
@@ -38,10 +40,19 @@ if [[ -n "$script_source" && -f "$(dirname "$script_source")/Dockerfile" ]]; the
 fi
 if [[ -n "$script_dir" ]]; then
   printf '\nInstalling Dockbase from %s...\n' "$script_dir"
-  cp -a "$script_dir"/Dockerfile "$script_dir"/compose.yaml "$script_dir"/.dockerignore "$script_dir"/package.json "$script_dir"/server.js "$script_dir"/public "$INSTALL_DIR"/
+  cp -a "$script_dir"/Dockerfile "$script_dir"/compose.yaml "$script_dir"/.dockerignore "$script_dir"/package.json "$script_dir"/server.js "$script_dir"/uninstall.sh "$script_dir"/public "$INSTALL_DIR"/
 else
   printf '\nDownloading Dockbase...\n'
-  curl --fail --location --retry 3 --silent --show-error "$REPO_TARBALL" | tar -xz --strip-components=1 -C "$INSTALL_DIR"
+  tmp_extract="$(mktemp -d)"
+  trap 'rm -rf "$tmp_extract"' EXIT
+  curl --fail --location --retry 3 --silent --show-error "$REPO_TARBALL" | tar -xz --strip-components=1 -C "$tmp_extract"
+  cp -a "$tmp_extract"/Dockerfile "$tmp_extract"/compose.yaml "$tmp_extract"/.dockerignore "$tmp_extract"/package.json "$tmp_extract"/server.js "$tmp_extract"/uninstall.sh "$tmp_extract"/public "$INSTALL_DIR"/
+  rm -rf "$tmp_extract"
+fi
+chmod 755 "$INSTALL_DIR/uninstall.sh"
+printf 'DOCKER_INSTALLED_BY_DOCKBASE=%s\n' "$(( 1 - docker_was_present ))" > "$INSTALL_DIR/.dockbase-install-state"
+if (( docker_was_present == 0 )); then
+  printf 'Docker was installed by this installer. Use "uninstall.sh --purge-docker" to remove Docker as well.\n'
 fi
 
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
@@ -69,3 +80,4 @@ sed -n 's/^PANEL_TOKEN=//p' "$INSTALL_DIR/.env"
 printf '\nKeep this key private. The panel can control Docker on this server.\n'
 printf 'Restrict database ports to trusted IPs in your VPS firewall.\n'
 printf 'Installed at %s\n' "$INSTALL_DIR"
+printf 'Uninstall completely (removes all databases and their data) with: sudo %s/uninstall.sh\n' "$INSTALL_DIR"

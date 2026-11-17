@@ -113,7 +113,7 @@ async function route(req, res) {
       if (!Number.isInteger(port) || port < 1 || port > 65535) return json(res, 400, { error: 'Port must be between 1 and 65535.' });
       const password = crypto.randomBytes(18).toString('base64url');
       const rootPassword = crypto.randomBytes(24).toString('base64url');
-      const args = ['run', '-d', '--name', name, '--restart', 'unless-stopped', '--label', 'database-panel.managed=true', '--label', `database-panel.type=${input.type}`, '--publish', `${port}:${db.port}`, '--volume', `${name}-data:${db.dataPath}`];
+      const args = ['run', '-d', '--name', name, '--restart', 'unless-stopped', '--label', 'database-panel.managed=true', '--label', `database-panel.type=${input.type}`, '--publish', `${port}:${db.port}`, '--mount', `type=volume,source=${name}-data,target=${db.dataPath},volume-label=database-panel.managed=true,volume-label=database-panel.type=${input.type}`];
       for (const env of db.env(database, username, password, rootPassword)) args.push('--env', env);
       args.push('--env', `TZ=${process.env.TZ || 'UTC'}`);
       args.push(db.image);
