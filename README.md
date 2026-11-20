@@ -26,7 +26,15 @@ On a fresh VPS running **Ubuntu 16.04 or newer** or **Debian 9 or newer**, run t
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo bash
 ```
 
-If you already have this repository checked out on the VPS, run `sudo ./install.sh` from its directory instead.
+Python users can run the equivalent one-command installer with Python 3 (no pip packages required):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo python3 -
+```
+
+The Python entry point delegates to the same tested Linux installer so Docker setup, OS compatibility, and updates behave identically. To set a different port, use `curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo env PANEL_PORT=8080 python3 -`. If you already have this repository checked out on the VPS, run `sudo ./install.sh` from its directory instead.
+
+This installs on an Ubuntu/Debian VPS. **It does not install Docker inside Railway or Render**; those platforms do not expose the Docker socket this panel needs.
 
 The installer prints the panel URL when it finishes. Open it on a trusted network and create your access key in the first-run setup screen. Setup is available only until the first key is created, and the key verifier is saved in a persistent Docker volume. To choose another port, pass `PANEL_PORT` through sudo:
 
