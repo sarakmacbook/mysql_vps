@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: dockbase-panel
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PANEL_TOKEN
+        generateValue: true

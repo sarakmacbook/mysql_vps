@@ -79,6 +79,14 @@ For local development, install Node.js 20+ and Docker Engine, then run `npm star
 
 The panel is privileged: it controls Docker and can create or remove containers. Put it behind HTTPS and a trusted network/reverse proxy, and keep the panel key private.
 
+## Railway and Render
+
+This repository includes a Railway Dockerfile configuration (`railway.json`) and a Render Blueprint (`render.yaml`). Both use `/api/health` as the service health check. To deploy the panel UI, import this repository into Railway or Render and provide a strong `PANEL_TOKEN` (Render generates one from the Blueprint; set one in Railway's service variables). Open the service URL and sign in with that key. The PostgreSQL engine is already listed in the database catalog.
+
+**Important limitation:** Railway and Render web services do not provide the host Docker daemon/socket that this panel requires to launch database containers. The panel UI can run there, but its Deploy and installation-management actions will report that Docker is unavailable. These manifests are suitable for viewing the UI/catalog, not for operating the panel. For a fully functional panel, install it on a Docker-enabled VPS using the installer above.
+
+If you want a managed PostgreSQL database on Railway or Render, create a PostgreSQL service using that platform's dashboard instead. That database is managed by the platform and is separate from this panel; this app does not provision or display a managed service's connection details. Keep database credentials private and use the platform's private/internal connection URL where possible.
+
 ## Network and data notes
 
 - Database ports are published on all host interfaces so clients can connect using the displayed host and port. **Restrict these ports with your VPS firewall** to only trusted IP addresses; do not expose database ports openly to the internet.
