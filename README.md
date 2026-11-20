@@ -20,31 +20,31 @@ Each database gets a named Docker volume and `unless-stopped` restart policy. Th
 
 ## One-command VPS install
 
-On a fresh VPS running **Ubuntu 16.04 or newer** or **Debian 9 or newer**, run this as a single command to install Docker Engine if needed, download Dockbase, build the panel container, and start it:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo bash
-```
-
-Python users can run the equivalent one-command installer with Python 3 (no pip packages required):
+On a fresh VPS running **Ubuntu 16.04 or newer** or **Debian 9 or newer**, run this one command to install Docker Engine if needed, download Dockbase, build the panel container, and start it:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo python3 -
 ```
 
-The Python entry point delegates to the same tested Linux installer so Docker setup, OS compatibility, and updates behave identically. To set a different port, use `curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo env PANEL_PORT=8080 python3 -`. If you already have this repository checked out on the VPS, run `sudo ./install.sh` from its directory instead.
-
-This installs on an Ubuntu/Debian VPS. **It does not install Docker inside Railway or Render**; those platforms do not expose the Docker socket this panel needs.
-
-The installer prints the panel URL when it finishes. Open it on a trusted network and create your access key in the first-run setup screen. Setup is available only until the first key is created, and the key verifier is saved in a persistent Docker volume. To choose another port, pass `PANEL_PORT` through sudo:
+Python 3's standard library is sufficient; no pip packages are required. The Python entry point runs the same Linux installer, preserving its Docker setup and OS compatibility behavior. To choose a different port or install directory, pass options after `-`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo PANEL_PORT=8080 bash
+curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo python3 - --port 8080 --install-dir /opt/dockbase
 ```
 
-Then open `http://YOUR_SERVER_IP:8080`.
+The shell installer remains available as an alternative:
 
-The install directory is `/opt/dockbase`. Re-running the installer updates and restarts the panel: `sudo /opt/dockbase/install.sh`. With Docker Compose it uses `docker compose up -d --build`; on hosts without Compose v2 (common on Ubuntu 16.04) it falls back to `docker build` + `docker run`, so nothing extra is required. The container mounts `/var/run/docker.sock` so it can provision database containers on the host.
+```sh
+curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo bash
+```
+
+If you already have this repository checked out on the VPS, run `sudo python3 install.py` from its directory. This installs on an Ubuntu/Debian VPS. **It does not install Docker inside Railway or Render**; those platforms do not expose the Docker socket this panel needs.
+
+The installer prints the panel URL when it finishes. Open it on a trusted network and create your access key in the first-run setup screen. Setup is available only until the first key is created, and the key verifier is saved in a persistent Docker volume. If you selected port `8080`, open `http://YOUR_SERVER_IP:8080`.
+
+The install directory is `/opt/dockbase`. Re-running the installer updates and restarts the panel: `sudo python3 /opt/dockbase/install.py` (or `sudo /opt/dockbase/install.sh`). With Docker Compose it uses `docker compose up -d --build`; on hosts without Compose v2 (common on Ubuntu 16.04) it falls back to `docker build` + `docker run`, so nothing extra is required. The container mounts `/var/run/docker.sock` so it can provision database containers on the host.
+
+If the installer stops with a Docker daemon error such as `connect: no such file or directory` for `/var/run/docker.sock`, Docker is not running. Start it with `sudo systemctl start docker` (or `sudo service docker start`), confirm `sudo docker info` succeeds, then run the install command again.
 
 Existing installs keep their configured `PANEL_TOKEN` for compatibility. If you no longer have that key and want to use first-run setup instead, remove the `PANEL_TOKEN=...` line from `/opt/dockbase/.env` and rerun the installer. Only do this while the panel is reachable by trusted users; the first visitor to setup can claim the panel.
 

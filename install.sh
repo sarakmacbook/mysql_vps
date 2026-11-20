@@ -202,12 +202,16 @@ if [[ -n "$script_source" && -f "$script_source" && -f "$(dirname "$script_sourc
 fi
 
 copy_panel_files() {
-  local src="$1"
+  local src="$1" file
   if [[ "$(cd "$src" && pwd -P)" == "$(cd "$INSTALL_DIR" && pwd -P)" ]]; then
     info 'Installer is running from the install directory; reusing files already there.'
     return 0
   fi
   cp -a "$src"/Dockerfile "$src"/compose.yaml "$src"/.dockerignore "$src"/package.json "$src"/server.js "$src"/install.sh "$src"/uninstall.sh "$src"/public "$INSTALL_DIR"/
+  # install.py is the Python entry point; tolerate sources predating it.
+  for file in install.py; do
+    [[ -f "$src/$file" ]] && cp -a "$src/$file" "$INSTALL_DIR"/
+  done
 }
 
 if [[ -n "$script_dir" ]]; then
