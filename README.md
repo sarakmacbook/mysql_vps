@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install
 
 If you already have this repository checked out on the VPS, run `sudo ./install.sh` from its directory instead.
 
-The installer prints the panel URL and a randomly generated access key when it finishes. Save the key, open the URL, and sign in. To choose another port, pass `PANEL_PORT` through sudo:
+The installer prints the panel URL when it finishes. Open it on a trusted network and create your access key in the first-run setup screen. Setup is available only until the first key is created, and the key verifier is saved in a persistent Docker volume. To choose another port, pass `PANEL_PORT` through sudo:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.sh | sudo PANEL_PORT=8080 bash
@@ -37,6 +37,8 @@ curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install
 Then open `http://YOUR_SERVER_IP:8080`.
 
 The install directory is `/opt/dockbase`. Re-running the installer updates and restarts the panel: `sudo /opt/dockbase/install.sh`. With Docker Compose it uses `docker compose up -d --build`; on hosts without Compose v2 (common on Ubuntu 16.04) it falls back to `docker build` + `docker run`, so nothing extra is required. The container mounts `/var/run/docker.sock` so it can provision database containers on the host.
+
+Existing installs keep their configured `PANEL_TOKEN` for compatibility. If you no longer have that key and want to use first-run setup instead, remove the `PANEL_TOKEN=...` line from `/opt/dockbase/.env` and rerun the installer. Only do this while the panel is reachable by trusted users; the first visitor to setup can claim the panel.
 
 ### Older releases (Ubuntu 16.04, 20.04; Debian 9/10)
 
@@ -75,9 +77,9 @@ Options:
 
 Docker is only offered for removal when `install.sh` installed it. If Docker and the `/var/lib/docker` directory are removed, the panel is gone along with all of its data; anything else on the server that relied on Docker is erased too, so take backups first.
 
-For local development, install Node.js 20+ and Docker Engine, then run `npm start`. Open `http://YOUR_SERVER:3000`. On first startup the server prints a **panel access key** to its terminal. To set one manually, use `PANEL_TOKEN='use-a-long-random-secret-here' PORT=3000 npm start`.
+For local development, install Node.js 20+ and Docker Engine, then run `npm start`. Open `http://YOUR_SERVER:3000` and create an access key in the first-run setup screen. The key must be at least 16 characters; its verifier is saved under `state/` (ignored by Git). To skip setup and configure a key manually, use `PANEL_TOKEN='use-a-long-random-secret-here' PORT=3000 npm start`.
 
-The panel is privileged: it controls Docker and can create or remove containers. Put it behind HTTPS and a trusted network/reverse proxy, and keep the panel key private.
+The panel is privileged: it controls Docker and can create or remove containers. Put it behind HTTPS and a trusted network/reverse proxy, and keep the panel key private. During first-run setup, restrict access to a trusted network so an unintended visitor cannot claim the initial setup.
 
 ## Railway and Render
 

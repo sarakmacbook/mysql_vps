@@ -221,17 +221,11 @@ fi
 chmod 755 "$INSTALL_DIR/install.sh" "$INSTALL_DIR/uninstall.sh"
 
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
-  if command -v openssl >/dev/null; then
-    token="$(openssl rand -hex 32)"
-  else
-    token="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-  fi
   umask 077
-  printf 'PANEL_TOKEN=%s\nPANEL_PORT=%s\n' "$token" "$PANEL_PORT" > "$INSTALL_DIR/.env"
+  printf 'PANEL_PORT=%s\n' "$PANEL_PORT" > "$INSTALL_DIR/.env"
 else
   chmod 600 "$INSTALL_DIR/.env"
   if ! grep -q '^PANEL_PORT=' "$INSTALL_DIR/.env"; then printf 'PANEL_PORT=%s\n' "$PANEL_PORT" >> "$INSTALL_DIR/.env"; fi
-  if ! grep -q '^PANEL_TOKEN=' "$INSTALL_DIR/.env"; then fail "$INSTALL_DIR/.env has no PANEL_TOKEN. Fix or remove the file and run this installer again."; fi
 fi
 chmod 600 "$INSTALL_DIR/.env"
 
@@ -242,11 +236,13 @@ if [[ "$panel_method" == compose ]]; then
 else
   printf '\nBuilding and starting the panel with docker build + docker run...\n'
   docker build -t dockbase-panel:latest "$INSTALL_DIR"
+  docker volume create --label database-panel.managed=true dockbase-panel-config >/dev/null
   docker rm -f dockbase-panel >/dev/null 2>&1 || true
   docker run -d --name dockbase-panel --restart unless-stopped \
     --env-file "$INSTALL_DIR/.env" \
     --publish "${PANEL_PORT}:3000" \
     --volume /var/run/docker.sock:/var/run/docker.sock \
+    --volume dockbase-panel-config:/app/state \
     --init --security-opt no-new-privileges:true \
     --label dockbase.managed=true \
     dockbase-panel:latest >/dev/null
@@ -264,9 +260,8 @@ fi
 
 public_ip="YOUR_SERVER_IP_OR_DOMAIN"
 printf '\nDockbase is ready: http://%s:%s\n' "$public_ip" "$PANEL_PORT"
-printf 'Panel access key: '
-sed -n 's/^PANEL_TOKEN=//p' "$INSTALL_DIR/.env"
-printf '\nKeep this key private. The panel can control Docker on this server.\n'
+printf 'Open the panel URL and create your access key during first-time setup.\n'
+printf 'Keep your key private. The panel can control Docker on this server.\n'
 printf 'Restrict database ports to trusted IPs in your VPS firewall.\n'
 printf 'Installed at %s\n' "$INSTALL_DIR"
 printf 'Panel management: %s\n' "$([[ "$panel_method" == compose ]] && echo 'docker compose' || echo 'docker run (Docker Compose is not installed)')"
