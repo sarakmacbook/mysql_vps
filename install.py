@@ -52,9 +52,14 @@ def main() -> int:
     if args.install_dir:
         env["DOCKBASE_INSTALL_DIR"] = args.install_dir
 
-    local_installer = Path(__file__).resolve().with_name("install.sh")
+    # When piped into `python3 -`, __file__ is a placeholder; always fetch the
+    # published installer in that case rather than trusting an install.sh in
+    # the current directory.
+    local_installer = None
+    if __file__ not in ("-", "<stdin>"):
+        local_installer = Path(__file__).resolve().with_name("install.sh")
     temporary_directory = None
-    if local_installer.is_file():
+    if local_installer is not None and local_installer.is_file():
         installer_path = local_installer
     else:
         temporary_directory = tempfile.TemporaryDirectory(prefix="dockbase-installer-")
