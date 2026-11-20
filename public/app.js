@@ -114,11 +114,40 @@ async function confirmRemove(name) {
   try { await api(`/api/installations/${encodeURIComponent(name)}`, { method: 'DELETE' }); sessionStorage.removeItem(`connection:${name}`); toast('Container removed. Data volume was kept.'); await refreshInstallations(); }
   catch (error) { toast(error.message); }
 }
+let setupRequired = false;
+function renderAuthMode(isSetup) {
+  setupRequired = isSetup;
+  $('#login-title').textContent = isSetup ? 'Set up your workspace.' : 'Welcome back.';
+  $('#login-description').textContent = isSetup
+    ? 'Create a strong access key to secure your database panel.'
+    : 'Enter your panel access key to manage your Docker databases.';
+  $('#token-label').textContent = isSetup ? 'Create access key' : 'Panel access key';
+  $('#panel-token').placeholder = isSetup ? 'At least 16 characters' : 'Paste your access key';
+  $('#panel-token').autocomplete = isSetup ? 'new-password' : 'current-password';
+  $('#panel-token').minLength = isSetup ? 16 : 1;
+  $('#confirm-key-field').classList.toggle('hidden', !isSetup);
+  $('#confirm-token').required = isSetup;
+  $('#login-submit').innerHTML = isSetup ? 'Create access key <span>→</span>' : 'Unlock workspace <span>→</span>';
+  $('#login-hint').textContent = isSetup
+    ? 'This is a one-time setup. Save your key somewhere safe; it cannot be recovered.'
+    : 'Use the access key configured for this server.';
+}
 $('#login-form').onsubmit = async event => {
-  event.preventDefault(); const button = event.currentTarget.querySelector('button');
+  event.preventDefault();
+  const button = $('#login-submit');
+  const token = $('#panel-token').value.trim();
   button.disabled = true; $('#login-error').textContent = '';
-  try { await unlock($('#panel-token').value.trim()); }
-  catch (error) { $('#login-error').textContent = error.message; }
+  try {
+    if (setupRequired) {
+      if (token !== $('#confirm-token').value.trim()) throw new Error('The access keys do not match.');
+      const response = await fetch('/api/setup', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Could not complete initial setup.');
+    }
+    await unlock(token);
+  } catch (error) { $('#login-error').textContent = error.message; }
   finally { button.disabled = false; }
 };
 $('#logout').onclick = lock;
@@ -126,5 +155,25 @@ document.querySelectorAll('.nav-item').forEach(item => item.onclick = () => swit
 ['top-install', 'hero-install', 'empty-install'].forEach(id => $('#' + id).onclick = () => switchView('databases'));
 $('#refresh').onclick = refreshInstallations;
 $('#server-time').textContent = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date());
-if (state.token) unlock(state.token).catch(() => { $('#login-screen').classList.remove('hidden'); });
-else $('#login-screen').classList.remove('hidden');
+async function initializeAuth() {
+  try {
+    const response = await fetch('/api/setup-status', { cache: 'no-store' });
+    const result = await response.json();
+    renderAuthMode(Boolean(result.setupRequired));
+    if (setupRequired) {
+      state.token = ''; sessionStorage.removeItem('panelToken');
+      $('#login-screen').classList.remove('hidden');
+      return;
+    }
+    if (state.token) {
+      try { await unlock(state.token); return; }
+      catch { state.token = ''; sessionStorage.removeItem('panelToken'); }
+    }
+    $('#login-screen').classList.remove('hidden');
+  } catch {
+    renderAuthMode(false);
+    $('#login-screen').classList.remove('hidden');
+    $('#login-error').textContent = 'Could not check setup status. Refresh and try again.';
+  }
+}
+initializeAuth();

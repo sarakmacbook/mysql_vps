@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
-const token = process.env.PANEL_TOKEN || crypto.randomBytes(24).toString('base64url');
+const CONFIG_FILE = process.env.PANEL_CONFIG_FILE || path.join(ROOT, 'state', 'panel-config.json');
 const DB_TYPES = {
   mysql: {
     name: 'MySQL', image: 'mysql:8.4', port: 3306, dataPath: '/var/lib/mysql', defaultUser: 'p2p', defaultDb: 'p2p',
@@ -41,6 +41,29 @@ const DB_TYPES = {
 };
 
 function enc(value) { return encodeURIComponent(String(value)); }
+function makeCredential(value, salt = crypto.randomBytes(16).toString('hex')) {
+  return { salt, verifier: crypto.scryptSync(value, salt, 32).toString('hex') };
+}
+function loadCredential() {
+  if (process.env.PANEL_TOKEN) return makeCredential(process.env.PANEL_TOKEN);
+  try {
+    const stored = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    if (stored.version !== 1 || typeof stored.salt !== 'string' || !/^[a-f0-9]{32}$/.test(stored.salt) || typeof stored.verifier !== 'string' || !/^[a-f0-9]{64}$/.test(stored.verifier)) {
+      throw new Error('Invalid panel setup file. Remove or repair ' + CONFIG_FILE + '.');
+    }
+    return { salt: stored.salt, verifier: stored.verifier };
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+let credential = loadCredential();
+function authorized(req) {
+  const header = req.headers.authorization || '';
+  if (!credential || !header.startsWith('Bearer ') || header.length > 263) return false;
+  const candidate = makeCredential(header.slice(7), credential.salt).verifier;
+  return crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(credential.verifier, 'hex'));
+}
 function json(res, code, data) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
   res.end(JSON.stringify(data));
@@ -84,13 +107,37 @@ function sendFile(res, filename, contentType) {
 async function route(req, res) {
   const pathname = new URL(req.url, 'http://localhost').pathname;
   if (req.method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true });
+  if (req.method === 'GET' && pathname === '/api/setup-status') return json(res, 200, { setupRequired: !credential });
+  if (req.method === 'POST' && pathname === '/api/setup') {
+    if (credential) return json(res, 409, { error: 'Initial setup is already complete.' });
+    let input;
+    try { input = await body(req); } catch (error) { return json(res, 400, { error: error.message }); }
+    if (typeof input.token !== 'string' || input.token.length < 16 || input.token.length > 256) {
+      return json(res, 400, { error: 'Access key must be between 16 and 256 characters.' });
+    }
+    const created = makeCredential(input.token);
+    try {
+      fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true, mode: 0o700 });
+      const fd = fs.openSync(CONFIG_FILE, 'wx', 0o600);
+      try { fs.writeFileSync(fd, JSON.stringify({ version: 1, ...created }) + '\n'); } finally { fs.closeSync(fd); }
+      fs.chmodSync(CONFIG_FILE, 0o600);
+      credential = created;
+      return json(res, 201, { ok: true });
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        credential = loadCredential();
+        return json(res, 409, { error: 'Initial setup is already complete.' });
+      }
+      return json(res, 500, { error: 'Could not save setup. Check that the panel state directory is writable.' });
+    }
+  }
   if (!pathname.startsWith('/api/')) {
     if (req.method === 'GET' && pathname === '/') return sendFile(res, 'index.html', 'text/html; charset=utf-8');
     if (req.method === 'GET' && pathname === '/app.css') return sendFile(res, 'app.css', 'text/css; charset=utf-8');
     if (req.method === 'GET' && pathname === '/app.js') return sendFile(res, 'app.js', 'text/javascript; charset=utf-8');
     res.writeHead(404); return res.end('Not found');
   }
-  if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: 'Invalid panel access key.' });
+  if (!authorized(req)) return json(res, 401, { error: 'Invalid panel access key.' });
   try {
     if (req.method === 'GET' && pathname === '/api/databases') {
       const items = Object.entries(DB_TYPES).map(([id, db]) => ({ id, name: db.name, image: db.image, port: db.port, description: db.description, icon: db.icon, color: db.color }));
@@ -145,6 +192,6 @@ async function route(req, res) {
 const server = http.createServer((req, res) => { route(req, res).catch(error => json(res, 500, { error: error.message })); });
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Database panel listening on http://0.0.0.0:${PORT}`);
-  if (!process.env.PANEL_TOKEN) console.log(`Panel access key (save this now): ${token}`);
-  console.log('Set PANEL_TOKEN to keep the same access key across restarts.');
+  console.log(credential ? 'Panel access key is configured.' : `First-run setup is available at http://0.0.0.0:${PORT}/`);
+  if (process.env.PANEL_TOKEN) console.log('Panel access key is provided by PANEL_TOKEN.');
 });
