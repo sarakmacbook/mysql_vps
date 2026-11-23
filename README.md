@@ -1,5 +1,15 @@
 # Dockbase — self-hosted database panel
 
+## One-command VPS install
+
+Install Dockbase on a fresh Ubuntu or Debian VPS with this command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo python3 -
+```
+
+The installer sets up Docker if needed, installs and starts the panel, then prints its URL. Open `http://YOUR_SERVER_IP:3000` and create your access key. To choose a different port, add `--port 8080` after the `-`.
+
 A small web control panel for launching common database engines as persistent Docker containers. Select an engine, set the container/database/username/port/host, and deploy. The panel generates strong passwords and displays a ready-to-copy connection URL, for example:
 
 ```text
@@ -18,9 +28,9 @@ mysql://user:password@db-host:3306/p2p
 
 Each database gets a named Docker volume and `unless-stopped` restart policy. The volume is labeled `database-panel.managed=true`. Removing a container from the panel deliberately keeps its volume and data; `uninstall.sh` erases both.
 
-## One-command VPS install
+## VPS installer details
 
-On a fresh VPS running **Ubuntu 16.04 or newer** or **Debian 9 or newer**, run this one command to install Docker Engine if needed, download Dockbase, build the panel container, and start it:
+The command above supports **Ubuntu 16.04 or newer** and **Debian 9 or newer**. It installs Docker Engine if needed, downloads Dockbase, builds the panel container, and starts it:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sarakmacbook/mysql_vps/main/install.py | sudo python3 -
