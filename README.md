@@ -109,6 +109,31 @@ For local development, install Node.js 20+ and Docker Engine, then run `npm star
 
 The panel is privileged: it controls Docker and can create or remove containers. Put it behind HTTPS and a trusted network/reverse proxy, and keep the panel key private. During first-run setup, restrict access to a trusted network so an unintended visitor cannot claim the initial setup.
 
+## Panel API reference
+
+Every endpoint except `/api/health`, `/api/setup-status` and `/api/setup` requires the panel access key:
+
+```sh
+curl -H "Authorization: Bearer <panel-key>" http://HOST:3000/api/databases
+```
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/health` | Liveness probe (no auth) |
+| GET | `/api/setup-status` | Whether first-run setup is required (no auth) |
+| POST | `/api/setup` | Claim the panel with the first key; available only until one exists (rate limited) |
+| GET | `/api/databases` | Engine catalog |
+| GET | `/api/installations` | List managed containers |
+| POST | `/api/installations` | Deploy an engine — `{"type":"mysql","name":"p2p","port":3306}` (all fields optional except `type`) |
+| POST | `/api/installations/:name/start` | Start a managed container |
+| POST | `/api/installations/:name/stop` | Stop a managed container |
+| POST | `/api/installations/:name/restart` | Restart a managed container |
+| DELETE | `/api/installations/:name` | Remove the container; its volume and data are kept |
+
+Lifecycle and delete actions apply only to containers labeled `database-panel.managed=true`.
+
+Error codes: `400` invalid input · `401` invalid panel key · `404` unknown route or unmanaged container · `409` Docker name/port conflict · `413` request body too large · `429` rate limited (check `Retry-After`) · `502` Docker daemon or timeout error.
+
 ## Railway and Render
 
 This repository includes a Railway Dockerfile configuration (`railway.json`) and a Render Blueprint (`render.yaml`). Both use `/api/health` as the service health check. To deploy the panel UI, import this repository into Railway or Render and provide a strong `PANEL_TOKEN` (Render generates one from the Blueprint; set one in Railway's service variables). Open the service URL and sign in with that key. The PostgreSQL engine is already listed in the database catalog.

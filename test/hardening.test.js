@@ -178,3 +178,49 @@ esac
     fs.rmSync(conflictTmp, { recursive: true, force: true });
   }
 });
+
+test('installations list parses docker ps output', async () => {
+  const response = await fetch(`${base}/api/installations`, { headers: auth });
+  assert.equal(response.status, 200);
+  const { installations } = await response.json();
+  assert.equal(installations.length, 1);
+  assert.deepEqual(installations[0], {
+    id: 'abc123',
+    name: 'mysql-test',
+    image: 'mysql:8.4',
+    state: 'running',
+    status: 'Up 1 minute',
+    ports: '0.0.0.0:3306->3306/tcp',
+    type: 'mysql',
+  });
+});
+
+test('installations list maps a failing Docker daemon to 502', async () => {
+  const brokenTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dockbase-broken-docker-test-'));
+  const fakeDocker = path.join(brokenTmp, 'docker');
+  fs.writeFileSync(fakeDocker, `#!/usr/bin/env bash
+echo 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?' >&2
+exit 1
+`);
+  fs.chmodSync(fakeDocker, 0o755);
+  const port = 18500 + Math.floor(Math.random() * 400);
+  const brokenBase = `http://127.0.0.1:${port}`;
+  const brokenServer = spawn(process.execPath, ['server.js'], {
+    env: { ...process.env, PORT: String(port), PANEL_TOKEN: key, PATH: `${brokenTmp}:${process.env.PATH}` },
+    stdio: 'ignore',
+  });
+  try {
+    let up = false;
+    for (let i = 0; i < 50 && !up; i++) {
+      try { up = (await fetch(`${brokenBase}/api/health`)).ok; } catch {}
+      if (!up) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(up, true, 'broken-docker server did not start');
+    const response = await fetch(`${brokenBase}/api/installations`, { headers: { authorization: `Bearer ${key}` } });
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).error, /Cannot connect to the Docker daemon/);
+  } finally {
+    brokenServer.kill('SIGTERM');
+    fs.rmSync(brokenTmp, { recursive: true, force: true });
+  }
+});
