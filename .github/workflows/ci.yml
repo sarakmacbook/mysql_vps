@@ -23,3 +23,14 @@ jobs:
           node-version: ${{ matrix.node-version }}
       # Zero runtime dependencies: the test suite needs no npm install.
       - run: npm test
+      - name: Smoke test (server boots and /api/health responds)
+        run: |
+          PORT=3100 node server.js &
+          pid=$!
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3100/api/health >/dev/null; then ok=1; break; fi
+            sleep 0.2
+          done
+          kill $pid || true
+          test "$ok" = "1"
