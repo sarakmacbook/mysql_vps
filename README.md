@@ -1,5 +1,7 @@
 # Dockbase — self-hosted database panel
 
+[![CI](https://github.com/sarakmacbook/mysql_vps/actions/workflows/ci.yml/badge.svg)](https://github.com/sarakmacbook/mysql_vps/actions/workflows/ci.yml)
+
 ## One-command VPS install
 
 Install Dockbase on a fresh Ubuntu or Debian VPS with this command:
