@@ -89,7 +89,12 @@ function makeCredential(value, salt = crypto.randomBytes(16).toString('hex')) {
 function loadCredential() {
   if (process.env.PANEL_TOKEN) return makeCredential(process.env.PANEL_TOKEN);
   try {
-    const stored = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    let stored;
+    try { stored = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
+    catch (parseError) {
+      if (parseError.code === 'ENOENT') return null;
+      throw new Error('Invalid panel setup file (not valid JSON). Remove or repair ' + CONFIG_FILE + '.');
+    }
     if (stored.version !== 1 || typeof stored.salt !== 'string' || !/^[a-f0-9]{32}$/.test(stored.salt) || typeof stored.verifier !== 'string' || !/^[a-f0-9]{64}$/.test(stored.verifier)) {
       throw new Error('Invalid panel setup file. Remove or repair ' + CONFIG_FILE + '.');
     }
@@ -99,7 +104,14 @@ function loadCredential() {
     throw error;
   }
 }
-let credential = loadCredential();
+let credential;
+try {
+  credential = loadCredential();
+} catch (error) {
+  // Fail closed: never start with unreadable panel credentials.
+  console.error('Cannot start: ' + error.message);
+  process.exit(1);
+}
 function authorized(req) {
   const header = req.headers.authorization || '';
   if (!credential || !header.startsWith('Bearer ') || header.length > 263) return false;

@@ -129,3 +129,5 @@ If you want a managed PostgreSQL database on Railway or Render, create a Postgre
 ```sh
 npm test
 ```
+
+The suite runs on GitHub Actions (`.github/workflows/ci.yml`) for Node 20 and 22 on every push and pull request to `main`.

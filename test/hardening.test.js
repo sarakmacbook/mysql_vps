@@ -121,3 +121,60 @@ test('failed authentication is rate limited', async () => {
     limited.kill('SIGTERM');
   }
 });
+
+test('corrupt panel config fails closed with a clear error instead of an uncaught exception', async () => {
+  const corruptTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dockbase-corrupt-test-'));
+  const corruptFile = path.join(corruptTmp, 'panel-config.json');
+  fs.writeFileSync(corruptFile, 'not valid json {{{');
+  const port = 18000 + Math.floor(Math.random() * 1000);
+  const outcome = await new Promise(resolve => {
+    const child = spawn(process.execPath, ['server.js'], {
+      env: { ...process.env, PORT: String(port), PANEL_TOKEN: '', PANEL_CONFIG_FILE: corruptFile },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '', err = '';
+    const timer = setTimeout(() => { child.kill('SIGKILL'); resolve({ code: -1, out, err }); }, 10000);
+    child.stdout.on('data', d => { out += d; });
+    child.stderr.on('data', d => { err += d; });
+    child.on('close', code => { clearTimeout(timer); resolve({ code, out, err }); });
+  });
+  fs.rmSync(corruptTmp, { recursive: true, force: true });
+  assert.equal(outcome.code, 1);
+  assert.match(outcome.err, /Invalid panel setup file|panel-config\.json/);
+});
+
+test('a port conflict from Docker maps to 409, not a generic failure', async () => {
+  const conflictTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dockbase-conflict-test-'));
+  const fakeDocker = path.join(conflictTmp, 'docker');
+  fs.writeFileSync(fakeDocker, `#!/usr/bin/env bash
+case "$1" in
+  run) echo 'docker: Error response from daemon: driver failed programming external connectivity on endpoint port-test: Bind for 0.0.0.0:3306 failed: port is already allocated.' >&2; exit 1 ;;
+  *) exit 0 ;;
+esac
+`);
+  fs.chmodSync(fakeDocker, 0o755);
+  const port = 19000 + Math.floor(Math.random() * 500);
+  const conflictBase = `http://127.0.0.1:${port}`;
+  const conflictServer = spawn(process.execPath, ['server.js'], {
+    env: { ...process.env, PORT: String(port), PANEL_TOKEN: key, PATH: `${conflictTmp}:${process.env.PATH}` },
+    stdio: 'ignore',
+  });
+  try {
+    let up = false;
+    for (let i = 0; i < 50 && !up; i++) {
+      try { up = (await fetch(`${conflictBase}/api/health`)).ok; } catch {}
+      if (!up) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(up, true, 'conflict-test server did not start');
+    const response = await fetch(`${conflictBase}/api/installations`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'mysql', name: 'port-test' }),
+    });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /already allocated/);
+  } finally {
+    conflictServer.kill('SIGTERM');
+    fs.rmSync(conflictTmp, { recursive: true, force: true });
+  }
+});
