@@ -186,7 +186,12 @@ $('#login-form').onsubmit = async event => {
 $('#logout').onclick = lock;
 document.querySelectorAll('.nav-item').forEach(item => item.onclick = () => switchView(item.dataset.view));
 ['top-install', 'hero-install', 'empty-install'].forEach(id => $('#' + id).onclick = () => switchView('databases'));
-$('#refresh').onclick = refreshInstallations;
+$('#refresh').onclick = async () => {
+  const button = $('#refresh');
+  button.disabled = true;
+  button.classList.add('busy');
+  try { await refreshInstallations(); } finally { button.disabled = false; button.classList.remove('busy'); }
+};
 $('#server-time').textContent = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date());
 async function initializeAuth() {
   try {
