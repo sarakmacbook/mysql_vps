@@ -22,6 +22,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       # Zero runtime dependencies: the test suite needs no npm install.
+      - name: Lint installer scripts
+        run: bash -n install.sh uninstall.sh && python3 -m py_compile install.py
       - run: npm test
       - name: Smoke test (server boots and /api/health responds)
         run: |
