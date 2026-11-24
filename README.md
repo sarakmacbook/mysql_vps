@@ -16,6 +16,14 @@ A small web control panel for launching common database engines as persistent Do
 mysql://user:password@db-host:3306/p2p
 ```
 
+## Panel features
+
+- **First-run setup** with scrypt-hashed access key stored in a persistent Docker volume (mode `0600`), or a `PANEL_TOKEN` from the environment.
+- **Start, stop and restart** managed containers from the installations list; the list auto-refreshes while containers are in a transitional state.
+- **Security defaults:** Content-Security-Policy and other security headers on every response, `no-store` API responses, and per-IP rate limiting on the setup and authentication paths.
+- **Persistent data:** every engine gets a labeled named volume; removing a container never deletes its data.
+- **Sensible failure modes:** Docker errors surface as `502` with the daemon's message, name/port conflicts as `409`, and invalid input as `400` before Docker is ever called.
+
 ## Supported engines
 
 | Engine | Image | Default port | Connection URL |
@@ -114,6 +122,7 @@ If you want a managed PostgreSQL database on Railway or Render, create a Postgre
 - Generated connection URLs are shown immediately after install and kept in the current browser tab’s session storage for convenience. They are not saved by this panel on the server. Copy and store them securely.
 - Credentials are applied as Docker environment variables during initialization. For MySQL/MariaDB the application user gets the displayed password, while the database root user gets a separate random password that is not shown.
 - Persisted data lives in named Docker volumes (`<container-name>-data`) labeled `database-panel.managed=true`. Back up those volumes using your normal Docker backup procedure.
+- The panel does not terminate TLS itself. Put it behind HTTPS (a reverse proxy or the installer's trusted-network expectation) so the access key and connection URLs are never sent over plaintext HTTP.
 
 ## Tests
 

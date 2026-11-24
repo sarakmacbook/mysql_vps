@@ -13,6 +13,7 @@ async function api(path, options = {}) {
 }
 function lock() {
   state.token = ''; sessionStorage.removeItem('panelToken');
+  clearTimeout(pollTimer);
   $('#login-screen').classList.remove('hidden');
 }
 async function unlock(token) {
@@ -35,6 +36,14 @@ function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
 }
 function connectionFor(name) { return sessionStorage.getItem(`connection:${name}`) || ''; }
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  const transitional = state.installations.some(item =>
+    ['created', 'starting', 'restarting', 'paused', 'removing'].includes(item.state) ||
+    /starting|restarting|created/i.test(item.status || ''));
+  if (transitional && state.token) pollTimer = setTimeout(refreshInstallations, 3000);
+}
 async function refreshInstallations() {
   try {
     const { installations } = await api('/api/installations');
@@ -46,6 +55,7 @@ async function refreshInstallations() {
     if (error.message !== 'Invalid panel access key.') toast(error.message);
     renderInstallations(error.message);
   }
+  schedulePoll();
 }
 function renderInstallations(error = '') {
   const list = $('#installation-list');
@@ -63,22 +73,37 @@ function renderInstallations(error = '') {
     const type = item.type || (item.name.split('-')[0] || '').toLowerCase();
     const typeName = names[type] || item.image.split(':')[0].split('/').pop();
     const uri = connectionFor(item.name);
-    return `<article class="installation-card"><div class="engine-icon ${iconClass(type)}">${iconText(type)}</div><div class="install-main"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.image)}</small></div><div class="connection-preview"><code title="${uri ? escapeHtml(uri) : 'Connection URL is available after deployment'}">${uri ? escapeHtml(uri) : `${escapeHtml(typeName)} · ${escapeHtml(item.status)}`}</code>${uri ? `<button class="copy-btn" data-copy="${escapeHtml(uri)}">Copy URL</button>` : ''}</div><span class="status-tag">${escapeHtml(item.state)}</span><button class="danger-btn" data-remove="${escapeHtml(item.name)}" title="Remove container (data volume is kept)">Remove</button></article>`;
+    const running = item.state === 'running';
+    const actions = running
+      ? `<button class="copy-btn" data-action="stop" data-name="${escapeHtml(item.name)}">Stop</button><button class="copy-btn" data-action="restart" data-name="${escapeHtml(item.name)}">Restart</button>`
+      : `<button class="copy-btn" data-action="start" data-name="${escapeHtml(item.name)}">Start</button>`;
+    return `<article class="installation-card"><div class="engine-icon ${iconClass(type)}">${iconText(type)}</div><div class="install-main"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.image)}</small></div><div class="connection-preview"><code title="${uri ? escapeHtml(uri) : 'Connection URL is available after deployment'}">${uri ? escapeHtml(uri) : `${escapeHtml(typeName)} · ${escapeHtml(item.status)}`}</code>${uri ? `<button class="copy-btn" data-copy="${escapeHtml(uri)}">Copy URL</button>` : ''}</div><span class="status-tag status-${escapeHtml(item.state)}">${escapeHtml(item.state)}</span><div class="card-actions">${actions}<button class="danger-btn" data-remove="${escapeHtml(item.name)}" title="Remove container (data volume is kept)">Remove</button></div></article>`;
   }).join('');
   list.querySelectorAll('[data-copy]').forEach(button => button.onclick = () => copy(button.dataset.copy));
   list.querySelectorAll('[data-remove]').forEach(button => button.onclick = () => confirmRemove(button.dataset.remove));
+  list.querySelectorAll('[data-action]').forEach(button => button.onclick = () => runAction(button.dataset.action, button.dataset.name, button));
 }
 function renderCatalog() {
   $('#database-grid').innerHTML = state.databases.map(db => `<article class="database-card"><div class="card-top"><div class="engine-icon ${db.color}">${escapeHtml(db.icon)}</div><span class="port-label">PORT ${db.port}</span></div><h3>${escapeHtml(db.name)}</h3><p>${escapeHtml(db.description)}</p><div class="card-footer"><span class="image-tag">${escapeHtml(db.image)}</span><button class="deploy-btn" data-deploy="${db.id}">Deploy <span>↗</span></button></div></article>`).join('');
   document.querySelectorAll('[data-deploy]').forEach(button => button.onclick = () => openDeploy(button.dataset.deploy));
 }
+let lastFocused = null;
 function showModal(content) {
+  lastFocused = document.activeElement;
   $('#modal-content').innerHTML = content;
   $('#modal-backdrop').classList.remove('hidden');
   $('#modal-close').onclick = closeModal;
   $('#modal-backdrop').onclick = e => { if (e.target === $('#modal-backdrop')) closeModal(); };
+  const firstField = $('#modal-content').querySelector('input, button:not(.modal-close)');
+  if (firstField) firstField.focus();
 }
-function closeModal() { $('#modal-backdrop').classList.add('hidden'); }
+function closeModal() {
+  $('#modal-backdrop').classList.add('hidden');
+  if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+}
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('#modal-backdrop').classList.contains('hidden')) closeModal();
+});
 function openDeploy(type) {
   const db = state.databases.find(item => item.id === type);
   if (!db) return;
@@ -113,6 +138,14 @@ async function confirmRemove(name) {
   if (!confirm(`Remove the ${name} container? Its Docker volume and data will be kept.`)) return;
   try { await api(`/api/installations/${encodeURIComponent(name)}`, { method: 'DELETE' }); sessionStorage.removeItem(`connection:${name}`); toast('Container removed. Data volume was kept.'); await refreshInstallations(); }
   catch (error) { toast(error.message); }
+}
+async function runAction(action, name, button) {
+  button.disabled = true;
+  try {
+    await api(`/api/installations/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
+    toast(`${name} ${action === 'stop' ? 'stopped' : action === 'start' ? 'started' : 'restarting'}…`);
+    await refreshInstallations();
+  } catch (error) { toast(error.message); button.disabled = false; }
 }
 let setupRequired = false;
 function renderAuthMode(isSetup) {
